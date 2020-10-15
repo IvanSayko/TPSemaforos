@@ -1,0 +1,564 @@
+
+#include <stdio.h>      // libreria estandar
+#include <stdlib.h>     // para usar exit y funciones de la libreria standard
+#include <string.h>
+#include <pthread.h>    // para usar threads
+#include <semaphore.h>  // para usar semaforos
+#include <unistd.h>
+
+
+#define LIMITE 50
+
+int winCont = 1;
+
+int burguerCont[3];
+
+char listaDePasosEIngredientes [48][48];
+
+
+
+pthread_mutex_t mutexPan;
+pthread_mutex_t mutexSalar;
+pthread_mutex_t mutexCocinar;
+//pthread_mutex_t mutexImprimir;
+
+//creo estructura de semaforos 
+struct semaforos {
+    sem_t sem_mezclar;
+	sem_t sem_salar;
+	sem_t sem_armarM;
+	//sem_t sem_armarH;
+	sem_t sem_cocinarM;
+	sem_t sem_panOK;
+	sem_t sem_medallonOK;
+	sem_t sem_extrasOK;
+
+	//poner demas semaforos aqui
+};
+
+//creo los pasos con los ingredientes
+struct paso {
+   char accion [LIMITE];
+   char ingredientes[4][LIMITE];
+   
+};
+
+//creo los parametros de los hilos 
+struct parametro {
+ int equipo_param;
+ struct semaforos semaforos_param;
+ struct paso pasos_param[8];
+};
+
+//funcion para imprimir las acciones y los ingredientes de la accion
+void* imprimirAccion(void *data, char *accionIn) {
+	//pthread_mutex_lock(&mutexImprimir);
+	struct parametro *mydata = data;
+	//calculo la longitud del array de pasos 
+	int sizeArray = (int)( sizeof(mydata->pasos_param) / sizeof(mydata->pasos_param[0]));
+	//indice para recorrer array de pasos 
+	int i;
+	for(i = 0; i < sizeArray; i ++){
+		//pregunto si la accion del array es igual a la pasada por parametro (si es igual la funcion strcmp devuelve cero)
+		if(strcmp(mydata->pasos_param[i].accion, accionIn) == 0){
+		printf("\tEquipo %d - accion %s \n " , mydata->equipo_param, mydata->pasos_param[i].accion);
+		//calculo la longitud del array de ingredientes
+		int sizeArrayIngredientes = (int)( sizeof(mydata->pasos_param[i].ingredientes) / sizeof(mydata->pasos_param[i].ingredientes[0]) );
+		//indice para recorrer array de ingredientes
+		int h;
+		printf("\tEquipo %d -----------ingredientes : ----------\n",mydata->equipo_param); 
+		FILE* fichero;
+		fichero = fopen("textito.txt", "a");
+		fprintf(fichero, "\tEquipo %d - accion %s \n ", mydata->equipo_param, mydata->pasos_param[i].accion);
+		fprintf(fichero, "\tEquipo %d -----------ingredientes : ----------\n",mydata->equipo_param); 
+			for(h = 0; h < sizeArrayIngredientes; h++) {
+				//consulto si la posicion tiene valor porque no se cuantos ingredientes tengo por accion 
+				if(strlen(mydata->pasos_param[i].ingredientes[h]) != 0) {
+							printf("\tEquipo %d ingrediente  %d : %s \n",mydata->equipo_param,h,mydata->pasos_param[i].ingredientes[h]);
+							fprintf(fichero, "\tEquipo %d ingrediente  %d : %s \n",mydata->equipo_param,h,mydata->pasos_param[i].ingredientes[h]);
+				}
+			}
+
+					fclose(fichero);
+	
+		}
+	}
+	//pthread_mutex_unlock(&mutexImprimir);
+}
+
+//funcion para tomar de ejemplo
+void* cortar(void *data) {
+	//creo el nombre de la accion de la funcion 
+	char *accion = "cortar";
+	//creo el puntero para pasarle la referencia de memoria (data) del struct pasado por parametro (la cual es un puntero). 
+	struct parametro *mydata = data;
+	//llamo a la funcion imprimir le paso el struct y la accion de la funcion
+	//imprimirAccion(mydata,accion);
+	//uso sleep para simular que que pasa tiempo
+	usleep( 200000 );
+	imprimirAccion(mydata,accion);
+	//doy la señal a la siguiente accion (cortar me habilita mezclar)
+    sem_post(&mydata->semaforos_param.sem_mezclar);
+	
+    pthread_exit(NULL);
+}
+
+void* mezclar(void *data) {
+
+	
+	char *accion = "mezclar";
+	struct parametro *mydata = data;
+
+	sem_wait(&mydata->semaforos_param.sem_mezclar);
+	usleep(600000);	
+	imprimirAccion(mydata,accion);
+    sem_post(&mydata->semaforos_param.sem_salar);
+	
+    pthread_exit(NULL);
+}
+
+void* salar(void *data) {
+
+	char *accion = "salar"; 
+	struct parametro *mydata = data;
+
+	sem_wait(&mydata->semaforos_param.sem_salar);
+
+	pthread_mutex_lock(&mutexSalar);
+
+
+	usleep( 1500000 );
+	imprimirAccion(mydata,accion);
+
+
+	pthread_mutex_unlock(&mutexSalar);
+
+	
+    sem_post(&mydata->semaforos_param.sem_armarM);
+	
+    pthread_exit(NULL);
+}
+
+void* armarM(void *data) {
+
+	char *accion = "armarM";
+	struct parametro *mydata = data;
+
+	sem_wait(&mydata->semaforos_param.sem_armarM);
+
+	usleep(600000);	
+	imprimirAccion(mydata,accion);
+    sem_post(&mydata->semaforos_param.sem_cocinarM);
+	
+    pthread_exit(NULL);
+}
+
+void* cocinarM(void *data) {
+
+	char *accion = "cocinarM"; 
+	struct parametro *mydata = data;
+
+	sem_wait(&mydata->semaforos_param.sem_cocinarM);
+
+	pthread_mutex_lock(&mutexCocinar);
+
+
+	usleep( 1500000 );
+	imprimirAccion(mydata,accion);
+
+
+    
+	pthread_mutex_unlock(&mutexCocinar);
+
+	sem_post(&mydata->semaforos_param.sem_medallonOK);
+
+    pthread_exit(NULL);
+}
+
+
+void* cortarExtras(void *data) {
+
+	char *accion = "cortarExtras"; 
+	struct parametro *mydata = data;
+
+
+
+	usleep( 600000 );
+	imprimirAccion(mydata,accion);
+
+	sem_post(&mydata->semaforos_param.sem_extrasOK);
+	
+    pthread_exit(NULL);
+}
+
+void* hornearPan(void *data) {
+
+	char *accion = "hornearPan"; 
+	struct parametro *mydata = data;
+
+	pthread_mutex_lock(&mutexPan);
+
+
+	usleep( 1500000 );
+	imprimirAccion(mydata,accion);
+
+
+	pthread_mutex_unlock(&mutexPan);
+
+	sem_post(&mydata->semaforos_param.sem_panOK);
+	
+    pthread_exit(NULL);
+}
+
+void* armarH(void *data) {
+
+	char *accion = "armarH"; 
+	struct parametro *mydata = data;
+
+	sem_wait(&mydata->semaforos_param.sem_panOK);
+
+	sem_wait(&mydata->semaforos_param.sem_extrasOK);
+
+	sem_wait(&mydata->semaforos_param.sem_medallonOK);
+
+
+	usleep( 600000 );
+	imprimirAccion(mydata,accion);
+
+	FILE* fichero;
+	fichero = fopen("textito.txt", "a");
+
+	burguerCont[mydata->equipo_param-1]++;
+
+	printf("\tEl equipo %d acaba de hacer una hamburguesa! En total ya hizo %d \n",mydata->equipo_param, burguerCont[mydata->equipo_param-1]);
+
+	fprintf(fichero, "\tEquipo %d acaba de hacer una hamburguesa! En total ya hizo %d \n", mydata->equipo_param, burguerCont[mydata->equipo_param-1]);
+
+
+	if(burguerCont[mydata->equipo_param-1] == 2) 
+	{
+		printf("\tEl equipo %d TERMINO! Puesto en la competencia: %d \n",mydata->equipo_param, winCont);
+		fprintf(fichero, "\tEl equipo %d TERMINO! Puesto en la competencia: %d \n",mydata->equipo_param, winCont);
+
+		winCont++;
+	}
+	
+
+	fclose(fichero);
+    pthread_exit(NULL);
+}
+
+
+
+
+void* ejecutarReceta(void *i) {
+	
+	//variables semaforos
+	sem_t sem_mezclar;
+
+	sem_t sem_salar;
+
+	sem_t sem_armarM;
+
+	sem_t sem_cocinarM;
+
+	sem_t sem_extrasOK;
+	sem_t sem_panOK;
+	sem_t sem_medallonOK;
+
+
+
+	//crear variables semaforos aqui
+	
+	//variables hilos
+	pthread_t p1; 
+	pthread_t p2; 
+	pthread_t p3; 
+	pthread_t p4;
+	pthread_t p5;
+	pthread_t p6;
+	pthread_t p7; 
+	pthread_t p8;
+	
+	//crear variables hilos aqui
+	
+	//numero del equipo (casteo el puntero a un int)
+	int p = *((int *) i);
+	
+	printf("Ejecutando equipo %d \n", p);
+
+	//reservo memoria para el struct
+	struct parametro *pthread_data = malloc(sizeof(struct parametro));
+
+	//seteo los valores al struct
+	
+	//seteo numero de grupo
+	pthread_data->equipo_param = p;
+
+	//pthread_data->hamburguesasTerminadas = 0;
+
+
+
+
+	//seteo semaforos
+	pthread_data->semaforos_param.sem_mezclar = sem_mezclar;
+
+	pthread_data->semaforos_param.sem_salar = sem_salar;
+
+	pthread_data->semaforos_param.sem_armarM = sem_armarM;
+
+	pthread_data->semaforos_param.sem_cocinarM = sem_cocinarM;
+
+	pthread_data->semaforos_param.sem_panOK = sem_panOK;
+
+	pthread_data->semaforos_param.sem_medallonOK = sem_medallonOK;
+
+	pthread_data->semaforos_param.sem_extrasOK = sem_extrasOK;
+	//setear demas semaforos al struct aqui
+	
+	FILE * fPointer;
+	fPointer = fopen("receta.txt", "r");
+	char singleLine[150];
+	int contador = 0;
+
+	while(!feof(fPointer))
+	{
+		fgets(singleLine, 150, fPointer);
+		char *p = singleLine;
+		p[strlen(p)-2] = 0;				//esto le saca los dos ultimos caracteres a la linea, los cuales son el salto de linea. 
+		//p[strlen(p)-1] = 0;
+
+		strcpy(listaDePasosEIngredientes[contador], singleLine);              //asigno el valor en un array
+		//if(contador == 5) contador = 0;                                 //esto es pasar a otra accion
+		contador++;
+	}
+
+	fclose(fPointer);
+
+	
+	contador = 0;
+	/*
+	for(int m=0; m<8; m++)
+	{
+		strcpy(pthread_data->pasos_param[m].accion, listaDePasosEIngredientes[contador]);
+		contador++;
+
+		for(int i=0; i<5; i++)
+		{
+			strcpy(pthread_data->pasos_param[m].ingredientes[i], listaDePasosEIngredientes[contador]);
+			contador++;
+		}
+	}
+	*/
+
+	//seteo las acciones y los ingredientes (Faltan acciones e ingredientes) ¿Se ve hardcodeado no? ¿Les parece bien?
+    strcpy(pthread_data->pasos_param[0].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[0].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+    strcpy(pthread_data->pasos_param[0].ingredientes[1], listaDePasosEIngredientes[contador]);
+	contador++;
+ 	strcpy(pthread_data->pasos_param[0].ingredientes[2], listaDePasosEIngredientes[contador]);
+	 contador++;
+
+	strcpy(pthread_data->pasos_param[1].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[1].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+    strcpy(pthread_data->pasos_param[1].ingredientes[1], listaDePasosEIngredientes[contador]);
+	contador++;
+ 	strcpy(pthread_data->pasos_param[1].ingredientes[2], listaDePasosEIngredientes[contador]);
+	 contador++;
+	strcpy(pthread_data->pasos_param[1].ingredientes[3], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[2].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[2].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[3].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[3].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+    strcpy(pthread_data->pasos_param[3].ingredientes[1], listaDePasosEIngredientes[contador]);
+	contador++;
+ 	strcpy(pthread_data->pasos_param[3].ingredientes[2], listaDePasosEIngredientes[contador]);
+	 contador++;
+	strcpy(pthread_data->pasos_param[3].ingredientes[3], listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[3].ingredientes[4], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[4].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[4].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[5].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[5].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[5].ingredientes[1], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[6].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[6].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+
+	strcpy(pthread_data->pasos_param[7].accion, listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[7].ingredientes[0], listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[7].ingredientes[1], listaDePasosEIngredientes[contador]);
+	contador++;
+	strcpy(pthread_data->pasos_param[7].ingredientes[2], listaDePasosEIngredientes[contador]);
+	contador++;
+	
+	
+	//inicializo los semaforos
+
+	sem_init(&(pthread_data->semaforos_param.sem_mezclar),0,0);
+
+	sem_init(&(pthread_data->semaforos_param.sem_salar),0,0);
+
+	sem_init(&(pthread_data->semaforos_param.sem_armarM),0,0);
+
+	sem_init(&(pthread_data->semaforos_param.sem_cocinarM),0,0);
+
+	sem_init(&(pthread_data->semaforos_param.sem_panOK),0,0);
+	sem_init(&(pthread_data->semaforos_param.sem_extrasOK),0,0);
+	sem_init(&(pthread_data->semaforos_param.sem_medallonOK),0,0);
+	//inicializar demas semaforos aqui
+
+
+	//creo los hilos a todos les paso el struct creado (el mismo a todos los hilos) ya que todos comparten los semaforos 
+    int rc;
+    rc = pthread_create(&p1,                           //identificador unico
+                            NULL,                          //atributos del thread
+                                cortar,             //funcion a ejecutar
+                                pthread_data);                     //parametros de la funcion a ejecutar, pasado por referencia
+	//crear demas hilos aqui
+
+	rc = pthread_create(&p2,                           
+                            NULL,                          
+                                mezclar,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p3,                           
+                            NULL,                          
+                                salar,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p4,                           
+                            NULL,                          
+                                armarM,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p5,                           
+                            NULL,                          
+                                cocinarM,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p6,                           
+                            NULL,                          
+                                cortarExtras,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p7,                           
+                            NULL,                          
+                                hornearPan,             
+                                pthread_data);                     
+
+	rc = pthread_create(&p8,                           
+                            NULL,                          
+                                armarH,             
+                                pthread_data);                     
+	
+	
+	//join de todos los hilos
+	pthread_join (p1,NULL);
+	pthread_join (p2,NULL);
+	pthread_join (p3,NULL);
+	pthread_join (p4,NULL);
+	pthread_join (p5,NULL);
+	pthread_join (p6,NULL);
+	pthread_join (p7,NULL);
+	pthread_join (p8,NULL);
+
+	//crear join de demas hilos
+
+
+	//valido que el hilo se alla creado bien 
+    if (rc){
+       printf("Error:unable to create thread, %d \n", rc);
+       exit(-1);
+     }
+
+	 
+	//destruccion de los semaforos 
+	sem_destroy(&sem_mezclar);
+	//destruir demas semaforos 
+	
+	//salida del hilo
+	 pthread_exit(NULL);
+}
+
+
+int main ()
+{
+	//creo los nombres de los equipos 
+	int rc;
+	int *equipoNombre1 =malloc(sizeof(*equipoNombre1));
+	int *equipoNombre2 =malloc(sizeof(*equipoNombre2));
+	int *equipoNombre3 =malloc(sizeof(*equipoNombre3));
+	*equipoNombre1 = 1;
+	*equipoNombre2 = 2;
+	*equipoNombre3 = 3;
+
+	//creo las variables los hilos de los equipos
+	pthread_t equipo1; 
+	pthread_t equipo2;
+	pthread_t equipo3;
+ 
+ 	int aux =0;
+
+ while (aux <=1)
+ {
+ 
+ 
+	//inicializo los hilos de los equipos
+    rc = pthread_create(&equipo1,                           //identificador unico
+                            NULL,                          //atributos del thread
+                                ejecutarReceta,             //funcion a ejecutar
+                                equipoNombre1); 
+
+    rc = pthread_create(&equipo2,                           
+                            NULL,                          
+                                ejecutarReceta,             
+                                equipoNombre2);
+
+    rc = pthread_create(&equipo3,                           
+                            NULL,                          
+                                ejecutarReceta,             
+                                equipoNombre3);
+
+   if (rc){
+       printf("Error:unable to create thread, %d \n", rc);
+       exit(-1);
+     } 
+
+	//join de todos los hilos
+	pthread_join (equipo1,NULL);
+	pthread_join (equipo2,NULL);
+	pthread_join (equipo3,NULL);
+
+	aux++;
+ }
+    pthread_exit(NULL);
+}
+
+
+//Para compilar:   gcc HellsBurgers.c -o ejecutable -lpthread
+//Para ejecutar:   ./ejecutable
