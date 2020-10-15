@@ -1,15 +1,25 @@
-SUBTHREAD 1			 SUBTHREAD2			SUBTHREAD3
+
+Main crea a los 3 threads de equipos
+
+se crea un hilo por cada instruccion de la receta
+
+cortarACP y cortarExtras se ejecutan inmediatamente.
+			 			
      |				     |				     |
      V				     V                 		     V
 
 cortarACP()                     cortarExtras()			mutexPan()
-V(sem_mezclar)         						hornearPan()
+V(sem_mezclar)         		V(sem_armarH2)			hornearPan()
 								mutexPan()
+     |				     				V(sem_armarH3)
+     V
 
 P(sem_mezclar)
 mezclar 
 V(sem_salar)
 
+     |				     				     
+     V
 
 P(sem_salar)
 mutexSalar()
@@ -17,21 +27,36 @@ salar
 mutexSalar()
 V(sem_armarM)
 
+     |				     				     
+     V
 
 P(sem_armarM)
 armarM()
 V(sem_cocinarM)
 
+     |				     				     
+     V
 
 P(sem_cocinarM)
 mutexCocinar()
 cocinarM
 mutexCocinar()
-V(sem_armarH)
+V(sem_armarH1)
 
+     |				     				     
+     V
 
-P(sem_armarH)
+P(sem_armarH1)
+P(sem_armarH2)
+P(sem_armarH3)
 armarH()
+
+     |				     				     
+     V
+    
+if(ya hice 2 hamburguesas) imprimir que puesto sali
+else volver a empezar la receta
+
 
 
 
