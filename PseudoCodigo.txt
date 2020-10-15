@@ -1,0 +1,38 @@
+SUBTHREAD 1			 SUBTHREAD2			SUBTHREAD3
+     |				     |				     |
+     V				     V                 		     V
+
+cortarACP()                     cortarExtras()			mutexPan()
+V(sem_mezclar)         						hornearPan()
+								mutexPan()
+
+P(sem_mezclar)
+mezclar 
+V(sem_salar)
+
+
+P(sem_salar)
+mutexSalar()
+salar 
+mutexSalar()
+V(sem_armarM)
+
+
+P(sem_armarM)
+armarM()
+V(sem_cocinarM)
+
+
+P(sem_cocinarM)
+mutexCocinar()
+cocinarM
+mutexCocinar()
+V(sem_armarH)
+
+
+P(sem_armarH)
+armarH()
+
+
+
+
